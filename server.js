@@ -1,33 +1,35 @@
-// server.js
+// server.js - Fully compliant ES Module for Render
 
-import * as dotenv from 'dotenv';
 import express from 'express';
 import cors from 'cors';
 import { GoogleGenAI } from '@google/genai'; 
 import bodyParser from 'body-parser';
+import * as dotenv from 'dotenv'; // Keep for local testing if needed
 
-// 1. Configure dotenv
+// 1. Configuration & Security
+// NOTE: Render will inject GEMINI_API_KEY directly into process.env
+// The dotenv.config() is primarily for local testing.
 dotenv.config();
 
-// 2. Access variables
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY; 
+// Use the PORT environment variable provided by Render, or default to 3000
 const PORT = process.env.PORT || 3000; 
 const modelName = "gemini-2.5-flash"; 
 
-// Initialization and Error Handling
 if (!GEMINI_API_KEY) {
-  console.error("❌ ERROR: GEMINI_API_KEY not found in .env file. Shutting down.");
+  console.error("❌ ERROR: GEMINI_API_KEY not found in environment. Shutting down.");
   process.exit(1);
 }
 
 // Initialize the Gemini client
-// Note: We are no longer using ai.getGenerativeModel to avoid the persistent TypeError
 const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
 
 const app = express();
 
 // Middleware
 app.use(cors()); 
+// Use express.json() instead of body-parser for modern Express apps
+// But since you included body-parser, let's stick to it if you need its specific features
 app.use(bodyParser.json()); 
 
 // Define the system instruction for the AI model
@@ -38,11 +40,10 @@ Your responses must be:
 1. Empathetic and supportive in tone.
 2. Concise (maximum 3-4 sentences).
 3. Directly relevant to the caregiver's question.
-4. If a 'patientId' is provided, your response should be tailored and personalized based on the data you would theoretically access for that patient (e.g., mention recent agitation or poor sleep if you had access, otherwise give general personalized advice).
+4. If a 'patientId' is provided, your response should be tailored and personalized based on the data you would theoretically access for that patient.
 `;
 
-
-// Chat endpoint
+// Chat endpoint: /chat
 app.post('/chat', async (req, res) => {
   const { message, patientId } = req.body;
 
@@ -50,18 +51,12 @@ app.post('/chat', async (req, res) => {
     return res.status(400).json({ error: 'Message field is required.' });
   }
 
-  // Craft a more detailed prompt including the patient context
+  // Use the full context provided by the Flutter app (which includes all log data)
   let fullPrompt = message;
-  if (patientId) {
-    const patientContext = `The patient ID is ${patientId}. This caregiver tracks their patient's daily behavior. Please provide one actionable, personalized care tip based on general needs for Alzheimer's patients.`;
-    fullPrompt = `${message}. Context for response: ${patientContext}`;
-  }
 
   try {
-    console.log(`💭 Received message: ${message}`);
+    console.log(`💭 Received message for patient ${patientId}: ${message.substring(0, 50)}...`);
     
-    // ✅ FIX: Using ai.models.generateContent (Legacy/Alternative Pattern)
-    // This calls the method on a nested 'models' object, which is common in older SDK versions.
     const response = await ai.models.generateContent({ 
         model: modelName,
         contents: [{ role: "user", parts: [{ text: fullPrompt }] }],
@@ -75,16 +70,14 @@ app.post('/chat', async (req, res) => {
     console.log('✅ Gemini Reply received.');
     res.json({ reply: replyText });
   } catch (error) {
-    // If the error persists here (e.g., ai.models.generateContent is not a function),
-    // it confirms your SDK package MUST be reinstalled.
     console.error('❌ Gemini API Error:', error);
-    res.status(500).json({ reply: 'I am sorry, but the AI service is currently unavailable. Please check the server logs.' });
+    // Send 500 status to trigger the robust local fallback logic in the Flutter app
+    res.status(500).json({ reply: 'I am sorry, but the AI service is currently unavailable.' });
   }
 });
 
 // Start the server
 app.listen(PORT, () => {
   console.log(`\n🎯 MemoryMate Backend Running (Gemini AI Mode)`);
-  console.log(`📍 Accessible on: http://localhost:${PORT}`);
-  console.log(`💡 Ready for personalized data analysis via Gemini`);
+  console.log(`📍 Accessible on port: ${PORT}`);
 });
