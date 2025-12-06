@@ -1,0 +1,72 @@
+import express from "express";
+import cors from "cors";
+
+const app = express();
+app.use(cors());
+app.use(express.json());
+
+app.post("/chat", async (req, res) => {
+  const { message } = req.body;
+  console.log('💭 Received message:', message);
+
+  // Enhanced AI-like responses
+  let reply = getAIResponse(message);
+  
+  console.log('💬 AI Reply:', reply);
+  res.json({ reply });
+});
+
+function getAIResponse(message) {
+  const lowerMessage = message.toLowerCase();
+  
+  if (lowerMessage.includes('overwhelmed') || lowerMessage.includes('stress')) {
+    return "I understand caregiving can feel overwhelming. Try taking 5-minute breaks for deep breathing, break tasks into smaller steps, and remember that it's okay to ask for help. Your wellbeing is essential for providing good care.";
+  } else if (lowerMessage.includes('calm') && lowerMessage.includes('patient')) {
+    return "To help calm someone with dementia: use a soft, reassuring tone; maintain familiar routines; reduce noise and distractions; offer a comfort item like a favorite blanket; and approach slowly with a calm demeanor. Validation and reassurance often work better than reasoning.";
+  } else if (lowerMessage.includes('agitation') || lowerMessage.includes('agitated')) {
+    return "For managing agitation: first ensure basic comfort needs are met (pain, hunger, thirst). Create a calm environment, use soothing music or familiar activities, and speak in a reassuring tone. Sometimes a change of scenery or simple distraction can help redirect the agitation.";
+  } else if (lowerMessage.includes('dementia') || lowerMessage.includes('alzheimer')) {
+    return "Dementia is a progressive condition that affects memory, thinking, and daily functioning. Alzheimer's is the most common type. Focus on maintaining routines, creating a safe environment, and preserving dignity. Remember to care for yourself as well - caregiver burnout is real and important to address.";
+  } else if (lowerMessage.includes('memory') || lowerMessage.includes('forget')) {
+    return "Memory challenges are a core aspect of dementia. Use visual cues like labeled photos, establish consistent daily routines, and focus on the person's remaining abilities rather than what's been lost. It's often more helpful to enter their reality than to correct inaccuracies.";
+  } else if (lowerMessage.includes('sleep') || lowerMessage.includes('night')) {
+    return "Sleep issues are common in dementia. Try maintaining a consistent bedtime routine, limiting caffeine, ensuring daytime activity and light exposure, and creating a comfortable sleep environment. Sometimes a nightlight can help with confusion.";
+  } else if (lowerMessage.includes('eat') || lowerMessage.includes('food')) {
+    return "For eating challenges: offer smaller, more frequent meals; use familiar foods; minimize distractions during meals; ensure proper positioning; and be patient. Finger foods can sometimes work better than utensils for those with coordination difficulties.";
+  } else {
+    return "I understand you're asking about caregiving. As your AI assistant, I'm here to provide support and practical suggestions based on dementia care principles. For specific medical concerns or personalized advice, please consult with healthcare professionals who can assess the individual situation. How else can I support you today?";
+  }
+}
+
+app.get("/health", (req, res) => {
+  res.json({ 
+    status: "OK", 
+    message: "MemoryMate Backend Server is running",
+    mode: "Enhanced Mock Responses"
+  });
+});
+
+// Find available port automatically
+import { createServer } from 'http';
+
+const server = createServer(app);
+
+// Try ports starting from 3000
+const startServer = (port = 3000) => {
+  server.listen(port, '0.0.0.0')
+    .on('listening', () => {
+      console.log("🎯 MemoryMate Backend Running (Enhanced Mode)");
+      console.log(`📍 Accessible on: http://localhost:${port}`);
+      console.log("💡 Providing AI-like responses without OpenAI API");
+    })
+    .on('error', (err) => {
+      if (err.code === 'EADDRINUSE') {
+        console.log(`Port ${port} is busy, trying ${port + 1}...`);
+        startServer(port + 1);
+      } else {
+        console.error('Server error:', err);
+      }
+    });
+};
+
+startServer();
