@@ -1,55 +1,43 @@
-// server.js - Fully compliant ES Module for Render
+// server.js - Updated with explicit Safety Settings
 
 import express from 'express';
 import cors from 'cors';
-import { GoogleGenAI } from '@google/genai'; 
+import { GoogleGenAI, HarmCategory, HarmBlockThreshold } from '@google/genai'; // 👈 Import safety classes
 import bodyParser from 'body-parser';
-import * as dotenv from 'dotenv'; // Keep for local testing if needed
+import * as dotenv from 'dotenv';
 
-// 1. Configuration & Security
-// NOTE: Render will inject GEMINI_API_KEY directly into process.env
-// The dotenv.config() is primarily for local testing.
 dotenv.config();
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY; 
-// Use the PORT environment variable provided by Render, or default to 3000
 const PORT = process.env.PORT || 3000; 
 const modelName = "gemini-2.5-flash"; 
 
 if (!GEMINI_API_KEY) {
-  console.error("❌ ERROR: GEMINI_API_KEY not found in environment. Shutting down.");
+  console.error("❌ ERROR: GEMINI_API_KEY not found in environment.");
   process.exit(1);
 }
 
-// Initialize the Gemini client
 const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
-
 const app = express();
 
-// Middleware
 app.use(cors()); 
-// Use express.json() instead of body-parser for modern Express apps
-// But since you included body-parser, let's stick to it if you need its specific features
 app.use(bodyParser.json()); 
 
-// Define the system instruction for the AI model
-// Define the system instruction for the AI model
 const systemInstruction = `
 You are MemoryMate, an AI Care Partner designed to support caregivers of individuals with Alzheimer's and dementia.
 
 STRICT BOUNDARIES:
-1. You MUST ONLY answer questions related to Alzheimer's, dementia, caregiving, or the provided patient data. 
-2. If the user asks about ANYTHING outside of this scope (e.g., coding, math, general trivia, recipes, unrelated news), you must politely refuse by saying: "I am MemoryMate, an AI Care Partner. I can only assist with caregiving and dementia-related questions."
-3. You are not a doctor. Never diagnose conditions or prescribe medications. Suggest consulting a healthcare professional for medical emergencies.
+1. You MUST ONLY answer questions related to Alzheimer's, dementia, caregiving, or the provided patient data. Reject all unrelated topics politely.
+2. If a user uses minor swearing due to frustration (e.g., "This is so damn hard"), acknowledge their stress with high empathy.
+3. You must NEVER use swear words, vulgarity, or profanity yourself under any circumstances. Keep your language clean, warm, and professional.
+4. You are not a doctor. Never diagnose conditions or prescribe medications.
 
 TONE & FORMAT:
 1. Empathetic and supportive in tone.
 2. Concise (maximum 3-4 sentences).
 3. Directly relevant to the caregiver's question.
-4. If patient data is provided in the prompt, use it to tailor and personalize your response.
 `;
 
-// Chat endpoint: /chat
 app.post('/chat', async (req, res) => {
   const { message, patientId } = req.body;
 
@@ -57,33 +45,45 @@ app.post('/chat', async (req, res) => {
     return res.status(400).json({ error: 'Message field is required.' });
   }
 
-  // Use the full context provided by the Flutter app (which includes all log data)
-  let fullPrompt = message;
-
   try {
-    console.log(`💭 Received message for patient ${patientId}: ${message.substring(0, 50)}...`);
+    console.log(`💭 Received message for patient ${patientId}`);
     
     const response = await ai.models.generateContent({ 
         model: modelName,
-        contents: [{ role: "user", parts: [{ text: fullPrompt }] }],
+        contents: [{ role: "user", parts: [{ text: message }] }],
         config: {
             systemInstruction: systemInstruction,
+            // 👈 Configure safety settings so bad profanity/harassment is handled cleanly
+            safetySettings: [
+                {
+                    category: HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+                    threshold: HarmBlockThreshold.BLOCK_LOW_AND_ABOVE, // Blocks heavy profanity/slurs
+                },
+                {
+                    category: HarmCategory.HARM_CATEGORY_HARASSMENT,
+                    threshold: HarmBlockThreshold.BLOCK_LOW_AND_ABOVE, // Blocks aggressive personal attacks
+                }
+            ]
         }
     });
     
     const replyText = response.text.trim();
-    
-    console.log('✅ Gemini Reply received.');
     res.json({ reply: replyText });
+    
   } catch (error) {
     console.error('❌ Gemini API Error:', error);
-    // Send 500 status to trigger the robust local fallback logic in the Flutter app
+    
+    // Check if the error happened because the safety filter blocked the text
+    if (error.toString().toLowerCase().includes('safety')) {
+       return res.json({ 
+         reply: "I understand you're stressed, but please express your frustrations without using harsh language or slurs so I can continue to help support you." 
+       });
+    }
+    
     res.status(500).json({ reply: 'I am sorry, but the AI service is currently unavailable.' });
   }
 });
 
-// Start the server
 app.listen(PORT, () => {
-  console.log(`\n🎯 MemoryMate Backend Running (Gemini AI Mode)`);
-  console.log(`📍 Accessible on port: ${PORT}`);
+  console.log(`\n🎯 MemoryMate Backend Running`);
 });
